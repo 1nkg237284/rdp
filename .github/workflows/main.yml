@@ -1,5 +1,5 @@
 ```yaml
-name: Hardened Tailscalee RDP
+name: Hardened Tailscale RDP
 
 on:
   workflow_dispatch:
