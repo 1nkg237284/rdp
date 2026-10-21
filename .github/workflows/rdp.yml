@@ -1,4 +1,4 @@
-name: Tailscale RDP
+name: Hardened Tailscale RDP
 
 on:
   workflow_dispatch:
@@ -46,8 +46,8 @@ jobs:
             -Value 3 `
             -Force
 
-          # Remove previous custom firewall rule
-          netsh advfirewall firewall delete rule name="RDP-Tailscale" 2>$null
+          # Remove previous custom firewall rule cleanly using native PowerShell
+          Remove-NetFirewallRule -DisplayName "RDP-Tailscale" -ErrorAction SilentlyContinue
 
           # Allow RDP ONLY from Tailscale's CGNAT address range.
           New-NetFirewallRule `
@@ -77,7 +77,6 @@ jobs:
               exit 1
           }
 
-          # Protect the password from appearing in logs
           Write-Output "::add-mask::$env:RDP_PASSWORD"
 
           $securePass = ConvertTo-SecureString `
@@ -85,7 +84,6 @@ jobs:
             -AsPlainText `
             -Force
 
-          # Remove existing RDP account if present
           $existingUser = Get-LocalUser `
             -Name "RDP" `
             -ErrorAction SilentlyContinue
@@ -95,7 +93,6 @@ jobs:
               Remove-LocalUser -Name "RDP"
           }
 
-          # Create normal local user
           New-LocalUser `
             -Name "RDP" `
             -Password $securePass `
@@ -104,18 +101,15 @@ jobs:
             -PasswordNeverExpires `
             -UserMayNotChangePassword
 
-          # IMPORTANT: Do NOT add the account to Administrators.
           Add-LocalGroupMember `
             -Group "Remote Desktop Users" `
             -Member "RDP"
 
-          # Verify account exists
           if (-not (Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue)) {
               Write-Error "RDP user creation failed."
               exit 1
           }
 
-          # Verify user is NOT an administrator
           $adminMember = Get-LocalGroupMember `
             -Group "Administrators" `
             -ErrorAction SilentlyContinue |
@@ -200,7 +194,6 @@ jobs:
               exit 1
           }
 
-          # Prevent the auth key from appearing in output
           Write-Output "::add-mask::$env:TAILSCALE_AUTH_KEY"
 
           Write-Host "Connecting to Tailscale..."
@@ -235,7 +228,6 @@ jobs:
               exit 1
           }
 
-          # Verify the address is within the Tailscale CGNAT range
           if ($tsIP -notmatch '^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.') {
               Write-Error "Unexpected Tailscale IPv4 address: $tsIP"
               exit 1
@@ -255,7 +247,6 @@ jobs:
         run: |
           Write-Host "Running security checks..."
 
-          # Check RDP enabled
           $rdpEnabled = Get-ItemProperty `
             'HKLM:\System\CurrentControlSet\Control\Terminal Server'
 
@@ -264,7 +255,6 @@ jobs:
               exit 1
           }
 
-          # Check NLA
           $rdpConfig = Get-ItemProperty `
             'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
 
@@ -273,13 +263,11 @@ jobs:
               exit 1
           }
 
-          # Check TLS security layer
           if ($rdpConfig.SecurityLayer -ne 2) {
               Write-Error "TLS security layer is NOT enabled."
               exit 1
           }
 
-          # Check RDP user
           $rdpUser = Get-LocalUser `
             -Name "RDP" `
             -ErrorAction SilentlyContinue
@@ -289,7 +277,6 @@ jobs:
               exit 1
           }
 
-          # Check administrator membership
           $isAdmin = Get-LocalGroupMember `
             -Group "Administrators" `
             -ErrorAction SilentlyContinue |
@@ -302,7 +289,6 @@ jobs:
               exit 1
           }
 
-          # Check RDP port locally
           $portTest = Test-NetConnection `
             -ComputerName "127.0.0.1" `
             -Port 3389 `
