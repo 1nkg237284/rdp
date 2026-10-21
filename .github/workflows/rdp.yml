@@ -12,6 +12,22 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Validate Secrets Are Set
+        run: |
+          if ("${{ secrets.RDP_USERNAME }}" -eq "") {
+              Write-Error "CRITICAL: RDP_USERNAME secret is missing from repository settings!"
+              exit 1
+          }
+          if ("${{ secrets.RDP_PASSWORD }}" -eq "") {
+              Write-Error "CRITICAL: RDP_PASSWORD secret is missing from repository settings!"
+              exit 1
+          }
+          if ("${{ secrets.TAILSCALE_AUTH_KEY }}" -eq "") {
+              Write-Error "CRITICAL: TAILSCALE_AUTH_KEY secret is missing from repository settings!"
+              exit 1
+          }
+          Write-Host "All secrets are present."
+
       - name: Enable Remote Desktop (RDP)
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
