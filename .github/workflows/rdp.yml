@@ -134,11 +134,11 @@ jobs:
         shell: pwsh
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
-          $installerPath = "$env:RUNNER_TEMP\tailscale.msi"
+          $tempDir = [System.IO.Path]::GetTempPath()
+          $installerPath = $tempDir + "tailscale.msi"
 
           Write-Host "Downloading Tailscale..."
-
-          Invoke-WebRequest -Uri $tsUrl -OutFile$installerPath
+          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
 
           if (-not (Test-Path $installerPath)) {
               Write-Error "Tailscale installer download failed."
@@ -146,13 +146,7 @@ jobs:
           }
 
           Write-Host "Installing Tailscale..."
-
-          $process = Start-Process `
-            -FilePath "msiexec.exe" `
-            -ArgumentList "/i `"$installerPath`" /quiet /norestart" `
-            -Wait `
-            -PassThru `
-            -NoNewWindow
+          $process = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$installerPath`" /quiet /norestart" -Wait -PassThru -NoNewWindow
 
           if ($process.ExitCode -ne 0) {
               Write-Error "Tailscale installation failed with exit code $($process.ExitCode)"
@@ -169,7 +163,6 @@ jobs:
           }
 
           & $tailscale version
-
           Write-Host "Tailscale installed successfully."
 
 
@@ -263,83 +256,3 @@ jobs:
           }
 
           $rdpUser = Get-LocalUser `
-            -Name "RDP" `
-            -ErrorAction SilentlyContinue
-
-          if (-not $rdpUser) {
-              Write-Error "RDP user does not exist."
-              exit 1
-          }
-
-          $isAdmin = Get-LocalGroupMember `
-            -Group "Administrators" `
-            -ErrorAction SilentlyContinue |
-            Where-Object {
-              $_.Name -match '\\RDP$'
-            }
-
-          if ($isAdmin) {
-              Write-Error "RDP user has Administrator privileges."
-              exit 1
-          }
-
-          $portTest = Test-NetConnection `
-            -ComputerName "127.0.0.1" `
-            -Port 3389 `
-            -WarningAction SilentlyContinue
-
-          if (-not $portTest.TcpTestSucceeded) {
-              Write-Error "RDP port 3389 is not listening."
-              exit 1
-          }
-
-          Write-Host ""
-          Write-Host "=========================================="
-          Write-Host "       SECURITY CHECK PASSED"
-          Write-Host "=========================================="
-          Write-Host "NLA:              ENABLED"
-          Write-Host "TLS RDP Layer:    ENABLED"
-          Write-Host "RDP User:         NON-ADMINISTRATOR"
-          Write-Host "Firewall:         TAILSCALE RANGE ONLY"
-          Write-Host "Password:         HIDDEN"
-          Write-Host "=========================================="
-
-
-      # ============================================================
-      # 6. Display connection information WITHOUT password
-      # ============================================================
-      - name: Display RDP Connection Information
-        shell: pwsh
-        run: |
-          Write-Host ""
-          Write-Host "=========================================="
-          Write-Host "          RDP ACCESS INFORMATION"
-          Write-Host "=========================================="
-          Write-Host ""
-          Write-Host "Address:  $env:TAILSCALE_IP"
-          Write-Host "Port:     3389"
-          Write-Host "Username: RDP"
-          Write-Host "Password: GitHub Secret RDP_PASSWORD"
-          Write-Host ""
-          Write-Host "Use the Tailscale IP above in your Android"
-          Write-Host "Remote Desktop application."
-          Write-Host ""
-          Write-Host "=========================================="
-          Write-Host "        DO NOT SHARE THIS IP PUBLICLY"
-          Write-Host "=========================================="
-          Write-Host ""
-
-
-      # ============================================================
-      # 7. Keep runner alive
-      # ============================================================
-      - name: Maintain RDP Session
-        shell: pwsh
-        run: |
-          Write-Host "RDP session is active."
-          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-
-          while ($true) {
-              Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] RDP Active"
-              Start-Sleep -Seconds 300
-          }
