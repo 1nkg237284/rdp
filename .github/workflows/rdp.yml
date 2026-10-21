@@ -1,5 +1,4 @@
-```yaml
-name: Hardened Tailscale RDP
+name: Tailscale RDP
 
 on:
   workflow_dispatch:
@@ -7,7 +6,7 @@ on:
 jobs:
   secure-rdp:
     runs-on: windows-latest
-    timeout-minutes: 3600
+    timeout-minutes: 360
 
     steps:
 
@@ -51,7 +50,6 @@ jobs:
           netsh advfirewall firewall delete rule name="RDP-Tailscale" 2>$null
 
           # Allow RDP ONLY from Tailscale's CGNAT address range.
-          # Tailscale normally assigns addresses in 100.64.0.0/10.
           New-NetFirewallRule `
             -DisplayName "RDP-Tailscale" `
             -Direction Inbound `
@@ -74,7 +72,6 @@ jobs:
         env:
           RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
         run: |
-
           if (-not $env:RDP_PASSWORD) {
               Write-Error "RDP_PASSWORD GitHub secret is missing."
               exit 1
@@ -107,8 +104,7 @@ jobs:
             -PasswordNeverExpires `
             -UserMayNotChangePassword
 
-          # IMPORTANT:
-          # Do NOT add the account to Administrators.
+          # IMPORTANT: Do NOT add the account to Administrators.
           Add-LocalGroupMember `
             -Group "Remote Desktop Users" `
             -Member "RDP"
@@ -143,9 +139,8 @@ jobs:
       - name: Install Tailscale
         shell: pwsh
         run: |
-
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
-          $installerPath = Join-Path $env:RUNNER_TEMP "tailscale.msi"
+          $installerPath = Join-Path$env:RUNNER_TEMP "tailscale.msi"
 
           Write-Host "Downloading Tailscale..."
 
@@ -196,7 +191,6 @@ jobs:
         env:
           TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
-
           $tailscale = Join-Path `
             $env:ProgramFiles `
             "Tailscale\tailscale.exe"
@@ -225,9 +219,7 @@ jobs:
           $tsIP = $null
 
           for ($i = 1; $i -le 20; $i++) {
-
-              $tsIP = (& $tailscale ip -4 2>$null |
-                Select-Object -First 1).Trim()
+              $tsIP = (& $tailscale ip -4 2>$null | Select-Object -First 1).Trim()
 
               if ($tsIP) {
                   break
@@ -261,7 +253,6 @@ jobs:
       - name: Security Verification
         shell: pwsh
         run: |
-
           Write-Host "Running security checks..."
 
           # Check RDP enabled
@@ -340,7 +331,6 @@ jobs:
       - name: Display RDP Connection Information
         shell: pwsh
         run: |
-
           Write-Host ""
           Write-Host "=========================================="
           Write-Host "          RDP ACCESS INFORMATION"
@@ -355,7 +345,7 @@ jobs:
           Write-Host "Remote Desktop application."
           Write-Host ""
           Write-Host "=========================================="
-          Write-Host "       DO NOT SHARE THIS IP PUBLICLY"
+          Write-Host "        DO NOT SHARE THIS IP PUBLICLY"
           Write-Host "=========================================="
           Write-Host ""
 
@@ -366,7 +356,6 @@ jobs:
       - name: Maintain RDP Session
         shell: pwsh
         run: |
-
           Write-Host "RDP session is active."
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
 
@@ -374,4 +363,3 @@ jobs:
               Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] RDP Active"
               Start-Sleep -Seconds 300
           }
-```
