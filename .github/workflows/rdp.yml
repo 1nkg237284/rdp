@@ -45,7 +45,11 @@ jobs:
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-unsigned.exe"
           $installerPath = "$env:TEMP\tailscale-setup.exe"
-          Invoke-WebRequest -Uri $tsUrl -OutFile$installerPath
+          
+          # Bulletproof download method using .NET WebClient
+          $webClient = New-Object System.Net.WebClient
+          $webClient.DownloadFile($tsUrl,$installerPath)
+          
           Start-Process $installerPath -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
           Remove-Item $installerPath -Force
 
