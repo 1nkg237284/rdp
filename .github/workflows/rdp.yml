@@ -134,13 +134,11 @@ jobs:
         shell: pwsh
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
-          $installerPath = Join-Path$env:RUNNER_TEMP "tailscale.msi"
+          $installerPath = "$env:RUNNER_TEMP\tailscale.msi"
 
           Write-Host "Downloading Tailscale..."
 
-          Invoke-WebRequest `
-            -Uri $tsUrl `
-            -OutFile $installerPath
+          Invoke-WebRequest -Uri $tsUrl -OutFile$installerPath
 
           if (-not (Test-Path $installerPath)) {
               Write-Error "Tailscale installer download failed."
@@ -163,9 +161,7 @@ jobs:
 
           Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
 
-          $tailscale = Join-Path `
-            $env:ProgramFiles `
-            "Tailscale\tailscale.exe"
+          $tailscale = "$env:ProgramFiles\Tailscale\tailscale.exe"
 
           if (-not (Test-Path $tailscale)) {
               Write-Error "Tailscale executable was not found."
@@ -185,9 +181,7 @@ jobs:
         env:
           TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
-          $tailscale = Join-Path `
-            $env:ProgramFiles `
-            "Tailscale\tailscale.exe"
+          $tailscale = "$env:ProgramFiles\Tailscale\tailscale.exe"
 
           if (-not $env:TAILSCALE_AUTH_KEY) {
               Write-Error "TAILSCALE_AUTH_KEY secret is missing."
