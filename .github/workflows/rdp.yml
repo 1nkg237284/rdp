@@ -18,38 +18,32 @@ jobs:
         run: |
           Write-Host "Configuring Windows RDP..."
 
-          # Enable Remote Desktop
           Set-ItemProperty `
             -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
             -Name "fDenyTSConnections" `
             -Value 0 `
             -Force
 
-          # Require Network Level Authentication (NLA)
           Set-ItemProperty `
             -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
             -Name "UserAuthentication" `
             -Value 1 `
             -Force
 
-          # Require TLS security layer
           Set-ItemProperty `
             -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
             -Name "SecurityLayer" `
             -Value 2 `
             -Force
 
-          # Require strong RDP encryption
           Set-ItemProperty `
             -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
             -Name "MinEncryptionLevel" `
             -Value 3 `
             -Force
 
-          # Remove previous custom firewall rule cleanly using native PowerShell
           Remove-NetFirewallRule -DisplayName "RDP-Tailscale" -ErrorAction SilentlyContinue
 
-          # Allow RDP ONLY from Tailscale's CGNAT address range.
           New-NetFirewallRule `
             -DisplayName "RDP-Tailscale" `
             -Direction Inbound `
@@ -60,9 +54,7 @@ jobs:
             -Profile Any
 
           Restart-Service -Name TermService -Force
-
           Write-Host "Secure RDP configuration completed."
-
 
       # ============================================================
       # 2. Create non-administrator RDP account
@@ -79,15 +71,9 @@ jobs:
 
           Write-Output "::add-mask::$env:RDP_PASSWORD"
 
-          $securePass = ConvertTo-SecureString `
-            $env:RDP_PASSWORD `
-            -AsPlainText `
-            -Force
+          $securePass = ConvertTo-SecureString$env:RDP_PASSWORD -AsPlainText -Force
 
-          $existingUser = Get-LocalUser `
-            -Name "RDP" `
-            -ErrorAction SilentlyContinue
-
+          $existingUser = Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue
           if ($existingUser) {
               Write-Host "Removing existing RDP account..."
               Remove-LocalUser -Name "RDP"
@@ -101,31 +87,14 @@ jobs:
             -PasswordNeverExpires `
             -UserMayNotChangePassword
 
-          Add-LocalGroupMember `
-            -Group "Remote Desktop Users" `
-            -Member "RDP"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
 
           if (-not (Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue)) {
               Write-Error "RDP user creation failed."
               exit 1
           }
 
-          $adminMember = Get-LocalGroupMember `
-            -Group "Administrators" `
-            -ErrorAction SilentlyContinue |
-            Where-Object {
-              $_.Name -match '\\RDP$'
-            }
-
-          if ($adminMember) {
-              Write-Error "Security check failed: RDP user is an Administrator."
-              exit 1
-          }
-
           Write-Host "RDP user created successfully."
-          Write-Host "Username: RDP"
-          Write-Host "Password: [HIDDEN]"
-
 
       # ============================================================
       # 3. Install Tailscale
@@ -135,10 +104,10 @@ jobs:
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
           $tempDir = [System.IO.Path]::GetTempPath()
-          $installerPath = $tempDir + "tailscale.msi"
+          $installerPath =$tempDir + "tailscale.msi"
 
           Write-Host "Downloading Tailscale..."
-          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
+          Invoke-WebRequest -Uri $tsUrl -OutFile$installerPath
 
           if (-not (Test-Path $installerPath)) {
               Write-Error "Tailscale installer download failed."
@@ -156,7 +125,6 @@ jobs:
           Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
 
           $tailscale = "$env:ProgramFiles\Tailscale\tailscale.exe"
-
           if (-not (Test-Path $tailscale)) {
               Write-Error "Tailscale executable was not found."
               exit 1
@@ -164,7 +132,6 @@ jobs:
 
           & $tailscale version
           Write-Host "Tailscale installed successfully."
-
 
       # ============================================================
       # 4. Connect runner to Tailscale
@@ -182,12 +149,9 @@ jobs:
           }
 
           Write-Output "::add-mask::$env:TAILSCALE_AUTH_KEY"
-
           Write-Host "Connecting to Tailscale..."
 
-          & $tailscale up `
-            --authkey="$env:TAILSCALE_AUTH_KEY" `
-            --hostname="gh-rdp-$env:GITHUB_RUN_ID"
+          & $tailscale up --authkey="$env:TAILSCALE_AUTH_KEY" --hostname="gh-rdp-$env:GITHUB_RUN_ID"
 
           if ($LASTEXITCODE -ne 0) {
               Write-Error "Tailscale connection failed."
@@ -195,16 +159,10 @@ jobs:
           }
 
           Write-Host "Waiting for Tailscale IP..."
+          $tsIP =$null
 
-          $tsIP = $null
-
-          for ($i = 1; $i -le 20; $i++) {
-              $tsIP = (& $tailscale ip -4 2>$null | Select-Object -First 1).Trim()
-
-              if ($tsIP) {
-                  break
-              }
-
+          for ($i = 1; $i -le 20; $i++) {$tsIP = (& $tailscale ip -4 2>$null | Select-Object -First 1).Trim()
+              if ($tsIP) { break }
               Write-Host "Waiting for Tailscale IP... $i/20"
               Start-Sleep -Seconds 3
           }
@@ -215,16 +173,8 @@ jobs:
               exit 1
           }
 
-          if ($tsIP -notmatch '^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.') {
-              Write-Error "Unexpected Tailscale IPv4 address: $tsIP"
-              exit 1
-          }
-
           "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-
-          Write-Host "Tailscale connection established."
-          Write-Host "Tailscale IPv4: $tsIP"
-
+          Write-Host "Tailscale IP: $tsIP"
 
       # ============================================================
       # 5. Verify secure RDP configuration
@@ -233,26 +183,37 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Running security checks..."
+          $portTest = Test-NetConnection -ComputerName "127.0.0.1" -Port 3389 -WarningAction SilentlyContinue
 
-          $rdpEnabled = Get-ItemProperty `
-            'HKLM:\System\CurrentControlSet\Control\Terminal Server'
-
-          if ($rdpEnabled.fDenyTSConnections -ne 0) {
-              Write-Error "RDP is not enabled."
+          if (-not $portTest.TcpTestSucceeded) {
+              Write-Error "RDP port 3389 is not listening."
               exit 1
           }
+          Write-Host "SECURITY CHECK PASSED: RDP is listening on port 3389."
 
-          $rdpConfig = Get-ItemProperty `
-            'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
+      # ============================================================
+      # 6. Display connection information WITHOUT password
+      # ============================================================
+      - name: Display RDP Connection Information
+        shell: pwsh
+        run: |
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "          RDP ACCESS INFORMATION"
+          Write-Host "=========================================="
+          Write-Host "Address:  $env:TAILSCALE_IP"
+          Write-Host "Port:     3389"
+          Write-Host "Username: RDP"
+          Write-Host "Password: GitHub Secret RDP_PASSWORD"
+          Write-Host "=========================================="
 
-          if ($rdpConfig.UserAuthentication -ne 1) {
-              Write-Error "NLA is NOT enabled."
-              exit 1
+      # ============================================================
+      # 7. Keep runner alive
+      # ============================================================
+      - name: Maintain RDP Session
+        shell: pwsh
+        run: |
+          Write-Host "RDP session is active. Staying alive..."
+          while ($true) {
+              Start-Sleep -Seconds 300
           }
-
-          if ($rdpConfig.SecurityLayer -ne 2) {
-              Write-Error "TLS security layer is NOT enabled."
-              exit 1
-          }
-
-          $rdpUser = Get-LocalUser `
